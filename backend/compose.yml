@@ -1,0 +1,20 @@
+services:
+    postgres:
+        container_name: mellstroy-ai
+        image: postgres:latest
+        restart: always
+        environment:
+            - POSTGRES_USER=${POSTGRES_USER}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+        ports:
+            - 5432:5432
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        networks:
+            - mellstroy-ai
+
+volumes:
+    postgres_data:
+
+networks:
+    mellstroy-ai:
