@@ -20,9 +20,9 @@ async function bootstrap() {
 	app.use(cookieParser(config.getOrThrow<string>('COOKIES_SECRET')))
 
 	try {
-		await app.listen(4000)
+		await app.listen(port)
 
-		logger.log(`Сервер успешно запущен на: ${host}`)
+		logger.log(`Сервер успешно запущен: ${host}`)
 	} catch (error) {
 		logger.error(
 			`Не удалось запустить сервер на порту: ${port} ${error.message}`,
