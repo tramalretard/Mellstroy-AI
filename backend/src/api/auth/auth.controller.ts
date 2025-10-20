@@ -7,6 +7,7 @@ import {
 	Res,
 	UseGuards
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { AuthGuard } from '@nestjs/passport'
 import type { Request, Response } from 'express'
 
@@ -15,7 +16,10 @@ import { LoginRequest, RegisterRequest } from './dto'
 
 @Controller('auth')
 export class AuthController {
-	constructor(private readonly authService: AuthService) {}
+	constructor(
+		private readonly authService: AuthService,
+		private readonly configService: ConfigService
+	) {}
 
 	@Post('register')
 	async register(
@@ -52,17 +56,11 @@ export class AuthController {
 
 	@Get('google/callback')
 	@UseGuards(AuthGuard('google'))
-	async googleAuthCallback(
-		@Req() req,
-		@Res({ passthrough: true }) res: Response
-	) {
-		const { accessToken } = await this.authService.validateOAuthLogin(
-			res,
-			req
-		)
+	async googleAuthCallback(@Req() req, @Res() res: Response) {
+		await this.authService.validateOAuthLogin(res, req)
 
-		return res.redirect(
-			`${process.env['CLIENT_URL']}?accessToken=${accessToken}`
-		)
+		const clientUrl = this.configService.getOrThrow<string>('CLIENT_URL')
+
+		res.redirect(clientUrl)
 	}
 }

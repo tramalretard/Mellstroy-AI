@@ -110,16 +110,36 @@ export class AuthService {
 	}
 
 	async logout(res: Response) {
-		this.setCookie(res, '', new Date())
+		res.clearCookie('accessToken', {
+			domain: this.COOKIES_DOMAIN,
+			httpOnly: true,
+			secure: !isDev(this.configService),
+			sameSite: 'lax'
+		})
+
+		res.clearCookie('refreshToken', {
+			domain: this.COOKIES_DOMAIN,
+			httpOnly: true,
+			secure: !isDev(this.configService),
+			sameSite: 'lax',
+			path: '/auth'
+		})
+
+		res.status(200).json({ message: 'Успешный выход из системы' })
 	}
 
 	private async auth(res: Response, user: User) {
 		const { accessToken, refreshToken, refreshTokenExpires } =
 			await this.generateTokens(user)
 
-		this.setCookie(res, refreshToken, refreshTokenExpires)
+		this.setCookies(res, accessToken, refreshToken, refreshTokenExpires)
 
-		return { accessToken }
+		return {
+			id: user.id,
+			email: user.email,
+			username: user.username,
+			picture: user.picture
+		}
 	}
 
 	private async generateTokens(user: User) {
@@ -146,13 +166,27 @@ export class AuthService {
 		}
 	}
 
-	setCookie(res: Response, value: string, expires: Date) {
-		res.cookie('refreshToken', value, {
+	setCookies(
+		res: Response,
+		refreshToken: string,
+		accessToken: string,
+		refreshTokenExpires: Date
+	) {
+		res.cookie('accessToken', accessToken, {
 			httpOnly: true,
 			domain: this.COOKIES_DOMAIN,
-			expires,
+			maxAge: ms(this.JWT_ACCESS_TOKEN_TTL),
 			secure: !isDev(this.configService),
 			sameSite: 'lax'
+		})
+
+		res.cookie('refreshToken', refreshToken, {
+			httpOnly: true,
+			domain: this.COOKIES_DOMAIN,
+			expires: refreshTokenExpires,
+			secure: !isDev(this.configService),
+			sameSite: 'lax',
+			path: '/auth'
 		})
 	}
 
