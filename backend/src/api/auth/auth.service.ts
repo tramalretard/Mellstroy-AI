@@ -88,24 +88,31 @@ export class AuthService {
 	}
 
 	async refresh(req: Request, res: Response) {
-		if (!req || !req.cookies)
-			throw new UnauthorizedException('Не удалось получить refresh токен')
-
 		const refreshToken = req.cookies['refreshToken']
 
-		if (refreshToken) {
+		if (!refreshToken) {
+			throw new UnauthorizedException('Refresh токен не найден')
+		}
+
+		try {
 			const payload: JwtPayload =
 				await this.jwtService.verifyAsync(refreshToken)
 
-			if (payload) {
-				const user = await this.prismaService.user.findUnique({
-					where: {
-						id: payload.id
-					}
-				})
+			const user = await this.prismaService.user.findUnique({
+				where: { id: payload.id }
+			})
 
-				if (user) return this.auth(res, user)
+			if (!user) {
+				throw new UnauthorizedException(
+					'Пользователь для токена не найден'
+				)
 			}
+
+			return this.auth(res, user)
+		} catch (error) {
+			throw new UnauthorizedException(
+				'Невалидный или истекший refresh токен'
+			)
 		}
 	}
 
@@ -114,7 +121,8 @@ export class AuthService {
 			domain: this.COOKIES_DOMAIN,
 			httpOnly: true,
 			secure: !isDev(this.configService),
-			sameSite: 'lax'
+			sameSite: 'lax',
+			path: '/'
 		})
 
 		res.clearCookie('refreshToken', {
@@ -122,7 +130,7 @@ export class AuthService {
 			httpOnly: true,
 			secure: !isDev(this.configService),
 			sameSite: 'lax',
-			path: '/auth'
+			path: '/'
 		})
 
 		res.status(200).json({ message: 'Успешный выход из системы' })
@@ -132,7 +140,7 @@ export class AuthService {
 		const { accessToken, refreshToken, refreshTokenExpires } =
 			await this.generateTokens(user)
 
-		this.setCookies(res, accessToken, refreshToken, refreshTokenExpires)
+		this.setCookies(res, refreshToken, accessToken, refreshTokenExpires)
 
 		return {
 			id: user.id,
@@ -177,7 +185,8 @@ export class AuthService {
 			domain: this.COOKIES_DOMAIN,
 			maxAge: ms(this.JWT_ACCESS_TOKEN_TTL),
 			secure: !isDev(this.configService),
-			sameSite: 'lax'
+			sameSite: 'lax',
+			path: '/'
 		})
 
 		res.cookie('refreshToken', refreshToken, {
@@ -186,7 +195,7 @@ export class AuthService {
 			expires: refreshTokenExpires,
 			secure: !isDev(this.configService),
 			sameSite: 'lax',
-			path: '/auth'
+			path: '/'
 		})
 	}
 

@@ -1,9 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PassportStrategy } from '@nestjs/passport'
+import type { Request } from 'express'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import { JwtPayload } from 'src/api/auth/interfaces'
 import { PrismaService } from 'src/infra/prisma/prisma.service'
+
+const cookieExtractor = (req: Request): string | null => {
+	if (req && req.cookies) {
+		return req.cookies['accessToken']
+	}
+	return null
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
@@ -12,7 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 		private readonly configService: ConfigService
 	) {
 		super({
-			jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+			jwtFromRequest: ExtractJwt.fromExtractors([cookieExtractor]),
 			ignoreExpiration: false,
 			secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
 			algorithms: ['HS256']
@@ -26,7 +34,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 			}
 		})
 
-		if (!user) throw new NotFoundException('Пользователь не найден')
+		if (!user) {
+			throw new UnauthorizedException('Пользователь не найден')
+		}
 
 		return user
 	}
