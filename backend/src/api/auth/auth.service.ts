@@ -12,6 +12,8 @@ import type { Request, Response } from 'express'
 import { isDev, ms, StringValue } from 'src/common/utils'
 import { PrismaService } from 'src/infra/prisma/prisma.service'
 
+import { UserService } from '../user/user.service'
+
 import { LoginRequest } from './dto/login.dto'
 import { RegisterRequest } from './dto/register.dto'
 import { JwtPayload } from './interfaces'
@@ -26,7 +28,8 @@ export class AuthService {
 	constructor(
 		private readonly prismaService: PrismaService,
 		private readonly configService: ConfigService,
-		private readonly jwtService: JwtService
+		private readonly jwtService: JwtService,
+		private readonly userService: UserService
 	) {
 		this.JWT_ACCESS_TOKEN_TTL = configService.getOrThrow<StringValue>(
 			'JWT_ACCESS_TOKEN_TTL'
@@ -76,7 +79,7 @@ export class AuthService {
 
 		if (!user) throw new NotFoundException('Неверный email или пароль')
 
-		const isValidPassword = await verify(user.password, password)
+		const isValidPassword = await verify(user.password!, password)
 
 		if (!isValidPassword)
 			throw new NotFoundException('Неверный email или пароль')
@@ -143,7 +146,7 @@ export class AuthService {
 		}
 	}
 
-	private setCookie(res: Response, value: string, expires: Date) {
+	setCookie(res: Response, value: string, expires: Date) {
 		res.cookie('refreshToken', value, {
 			httpOnly: true,
 			domain: this.COOKIES_DOMAIN,
@@ -151,5 +154,43 @@ export class AuthService {
 			secure: !isDev(this.configService),
 			sameSite: 'lax'
 		})
+	}
+
+	async findOrCreateUserByOAuth(req: {
+		user: {
+			email: string
+			name: string
+			picture?: string
+			username?: string
+		}
+	}) {
+		let user = await this.userService.getByEmail(req.user.email)
+
+		if (!user) {
+			user = await this.prismaService.user.create({
+				data: {
+					email: req.user.email,
+					username: req.user.username || req.user.name,
+					picture: req.user.picture
+				}
+			})
+		}
+
+		return user
+	}
+
+	async validateOAuthLogin(
+		res: Response,
+		req: {
+			user: {
+				email: string
+				name: string
+				picture?: string
+			}
+		}
+	) {
+		const user = await this.findOrCreateUserByOAuth(req)
+
+		return this.auth(res, user)
 	}
 }
