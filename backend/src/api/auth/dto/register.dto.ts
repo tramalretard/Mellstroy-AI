@@ -1,7 +1,14 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator'
+import {
+	IsEmail,
+	IsNotEmpty,
+	IsOptional,
+	IsString,
+	MinLength
+} from 'class-validator'
 
 export class RegisterRequest {
 	@IsString({ message: 'Имя может быть только строкой' })
+	@IsOptional()
 	username: string
 
 	@IsNotEmpty({ message: 'Пароль не может быть пустым' })
@@ -12,4 +19,13 @@ export class RegisterRequest {
 	@IsNotEmpty({ message: 'Email не может быть пустым' })
 	@IsEmail()
 	email: string
+}
+
+export class ConfirmEmailDto {
+	@IsEmail()
+	email: string
+
+	@IsString()
+	@MinLength(6)
+	code: string
 }

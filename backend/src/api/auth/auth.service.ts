@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { BadRequestException, Injectable } from '@nestjs/common'
 import {
 	ConflictException,
 	NotFoundException,
@@ -8,20 +8,23 @@ import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import { User } from '@prisma/client'
 import { hash, verify } from 'argon2'
+import { randomBytes } from 'crypto'
 import type { Request, Response } from 'express'
 import { isDev, ms, StringValue } from 'src/common/utils'
 import { PrismaService } from 'src/infra/prisma/prisma.service'
 
+import { EmailService } from '../email/email.service'
 import { UserService } from '../user/user.service'
 
 import { LoginRequest } from './dto/login.dto'
-import { RegisterRequest } from './dto/register.dto'
+import { ConfirmEmailDto, RegisterRequest } from './dto/register.dto'
 import { JwtPayload } from './interfaces'
 
 @Injectable()
 export class AuthService {
 	private readonly JWT_ACCESS_TOKEN_TTL: StringValue
 	private readonly JWT_REFRESH_TOKEN_TTL: StringValue
+	private readonly EXPIRE_MINUTES_VERIFICATION_CODE: StringValue
 
 	private readonly COOKIES_DOMAIN: string
 
@@ -29,7 +32,8 @@ export class AuthService {
 		private readonly prismaService: PrismaService,
 		private readonly configService: ConfigService,
 		private readonly jwtService: JwtService,
-		private readonly userService: UserService
+		private readonly userService: UserService,
+		private emailService: EmailService
 	) {
 		this.JWT_ACCESS_TOKEN_TTL = configService.getOrThrow<StringValue>(
 			'JWT_ACCESS_TOKEN_TTL'
@@ -38,10 +42,15 @@ export class AuthService {
 			'JWT_REFRESH_TOKEN_TTL'
 		)
 
+		this.EXPIRE_MINUTES_VERIFICATION_CODE =
+			configService.getOrThrow<StringValue>(
+				'EXPIRE_MINUTES_VERIFICATION_CODE'
+			)
+
 		this.COOKIES_DOMAIN = configService.getOrThrow<string>('COOKIES_DOMAIN')
 	}
 
-	async register(res: Response, dto: RegisterRequest) {
+	async register(dto: RegisterRequest) {
 		const { username, password, email } = dto
 
 		const isExists = await this.prismaService.user.findUnique({
@@ -55,17 +64,36 @@ export class AuthService {
 				'Пользователь с таким email уже зарегистрирован'
 			)
 
+		const verificationCode = (
+			await this.generateVerificationCode()
+		).toString()
+
+		const verificationCodeExpiresAt = new Date(
+			Date.now() + ms(this.EXPIRE_MINUTES_VERIFICATION_CODE)
+		)
+
 		const hashPassword = await hash(password)
+		const hashVerificationCode = await hash(verificationCode)
 
 		const user = await this.prismaService.user.create({
 			data: {
 				username,
 				password: hashPassword,
-				email
+				email,
+				verificationCode: hashVerificationCode,
+				verificationCodeExpiresAt
 			}
 		})
 
-		return this.auth(res, user)
+		await this.emailService.sendUserConfirmation(
+			user.email,
+			verificationCode
+		)
+
+		return {
+			message:
+				'Регистрация прошла успешно. Пожалуйста, проверьте вашу почту и введите код подтверждения'
+		}
 	}
 
 	async login(res: Response, dto: LoginRequest) {
@@ -84,7 +112,24 @@ export class AuthService {
 		if (!isValidPassword)
 			throw new NotFoundException('Неверный email или пароль')
 
+		if (!user.isVerified) {
+			throw new UnauthorizedException(
+				'Пожалуйста, подтвердите ваш email перед входом'
+			)
+		}
+
 		return this.auth(res, user)
+	}
+
+	private async generateVerificationCode(): Promise<string> {
+		const numBytes = 3
+		const buffer = randomBytes(numBytes)
+		const randomNumber = buffer.readUIntBE(0, numBytes)
+		const min = 100000
+		const max = 999999
+		const range = max - min + 1
+		const sixDigitNumber = (randomNumber % range) + min
+		return sixDigitNumber.toString()
 	}
 
 	async refresh(req: Request, res: Response) {
@@ -235,5 +280,50 @@ export class AuthService {
 		const user = await this.findOrCreateUserByOAuth(req)
 
 		return this.auth(res, user)
+	}
+
+	async confirmEmail(res: Response, dto: ConfirmEmailDto) {
+		const isExist = await this.prismaService.user.findUnique({
+			where: { email: dto.email }
+		})
+
+		if (!isExist) throw new NotFoundException('Пользователь не найден')
+
+		if (isExist.isVerified)
+			throw new BadRequestException('Email уже подтвержден')
+
+		if (!isExist.verificationCode || !isExist.verificationCodeExpiresAt) {
+			throw new BadRequestException(
+				'Код подтверждения отсутствует или не был сгенерирован'
+			)
+		}
+
+		if (isExist.verificationCodeExpiresAt < new Date()) {
+			throw new BadRequestException(
+				'Срок действия кода истек. Пожалуйста, запросите новый код'
+			)
+		}
+
+		const isValidVerificationCode = await verify(
+			isExist.verificationCode,
+			dto.code
+		)
+
+		if (!isValidVerificationCode) {
+			throw new BadRequestException('Неверный код подтверждения')
+		}
+
+		const updatedUser = await this.prismaService.user.update({
+			where: { id: isExist.id },
+			data: {
+				isVerified: true,
+				verificationCode: null,
+				verificationCodeExpiresAt: null
+			}
+		})
+
+		const { password } = updatedUser
+
+		return this.auth(res, isExist)
 	}
 }

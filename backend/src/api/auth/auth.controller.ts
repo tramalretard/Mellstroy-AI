@@ -9,10 +9,11 @@ import {
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { AuthGuard } from '@nestjs/passport'
+import { User } from '@prisma/client'
 import type { Request, Response } from 'express'
 
 import { AuthService } from './auth.service'
-import { LoginRequest, RegisterRequest } from './dto'
+import { ConfirmEmailDto, LoginRequest, RegisterRequest } from './dto'
 
 @Controller('auth')
 export class AuthController {
@@ -22,11 +23,8 @@ export class AuthController {
 	) {}
 
 	@Post('register')
-	async register(
-		@Res({ passthrough: true }) res: Response,
-		@Body() dto: RegisterRequest
-	) {
-		return await this.authService.register(res, dto)
+	async register(@Body() dto: RegisterRequest) {
+		return await this.authService.register(dto)
 	}
 
 	@Post('login')
@@ -48,6 +46,14 @@ export class AuthController {
 		@Res({ passthrough: true }) res: Response
 	) {
 		return await this.authService.refresh(req, res)
+	}
+
+	@Post('confirm')
+	async confirmEmail(
+		@Body() dto: ConfirmEmailDto,
+		@Res({ passthrough: true }) res: Response
+	) {
+		return await this.authService.confirmEmail(res, dto)
 	}
 
 	@Get('google')

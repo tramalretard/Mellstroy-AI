@@ -10,6 +10,7 @@ import { UserService } from '../user/user.service'
 
 import { AuthController } from './auth.controller'
 import { AuthService } from './auth.service'
+import { EmailModule } from '../email/email.module'
 
 @Module({
 	imports: [
@@ -18,7 +19,8 @@ import { AuthService } from './auth.service'
 			imports: [ConfigModule],
 			useFactory: getJwtConfig,
 			inject: [ConfigService]
-		})
+		}),
+		EmailModule
 	],
 	controllers: [AuthController],
 	providers: [AuthService, JwtStrategy, UserService, GoogleStrategy]

@@ -10,10 +10,14 @@ datasource db {
 model User {
   id String @id @default(cuid())
 
-  username String
+  username String?
   email    String  @unique
   password String?
-  picture  String?  @default("/uploads/no-user-image.png")
+  picture  String? @default("/uploads/no-user-image.png")
+
+  verificationCodeExpiresAt DateTime? @map("verification_code_expires_at")
+  isVerified                Boolean   @default(false)
+  verificationCode          String?   @map("verification_code")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
