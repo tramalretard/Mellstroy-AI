@@ -29,3 +29,8 @@ export class ConfirmEmailDto {
 	@MinLength(6)
 	code: string
 }
+
+export class CheckEmailDto {
+	@IsEmail()
+	email: string
+}

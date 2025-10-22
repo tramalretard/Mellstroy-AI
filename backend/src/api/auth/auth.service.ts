@@ -59,10 +59,45 @@ export class AuthService {
 			}
 		})
 
-		if (isExists)
-			throw new ConflictException(
-				'Пользователь с таким email уже зарегистрирован'
+		if (isExists) {
+			if (isExists.isVerified) {
+				throw new ConflictException(
+					'Пользователь с таким email уже зарегистрирован'
+				)
+			}
+
+			const verificationCode = (
+				await this.generateVerificationCode()
+			).toString()
+
+			const verificationCodeExpiresAt = new Date(
+				Date.now() + ms(this.EXPIRE_MINUTES_VERIFICATION_CODE)
 			)
+
+			const hashPassword = await hash(password)
+			const hashVerificationCode = await hash(verificationCode)
+
+			await this.prismaService.user.update({
+				where: { id: isExists.id },
+				data: {
+					password: hashPassword,
+					verificationCode: hashVerificationCode,
+					verificationCodeExpiresAt,
+					username
+				}
+			})
+
+			/* 	await this.emailService.sendUserConfirmation(
+				isExists.email,
+				verificationCode
+			) */
+			console.log(verificationCode)
+			return {
+				message:
+					'Мы отправили Вам новый код подтверждения. Пожалуйста, проверьте почту',
+				resent: true
+			}
+		}
 
 		const verificationCode = (
 			await this.generateVerificationCode()
@@ -280,6 +315,20 @@ export class AuthService {
 		const user = await this.findOrCreateUserByOAuth(req)
 
 		return this.auth(res, user)
+	}
+
+	async checkEmail(email: string) {
+		const user = await this.prismaService.user.findUnique({
+			where: { email }
+		})
+
+		if (user && user.isVerified) {
+			throw new ConflictException(
+				'Пользователь с таким email уже зарегистрирован'
+			)
+		}
+
+		return { message: 'Email доступен для регистрации' }
 	}
 
 	async confirmEmail(res: Response, dto: ConfirmEmailDto) {

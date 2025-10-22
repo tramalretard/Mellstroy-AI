@@ -11,9 +11,15 @@ import { ConfigService } from '@nestjs/config'
 import { AuthGuard } from '@nestjs/passport'
 import { User } from '@prisma/client'
 import type { Request, Response } from 'express'
+import { Protected } from 'src/common/decorators'
 
 import { AuthService } from './auth.service'
-import { ConfirmEmailDto, LoginRequest, RegisterRequest } from './dto'
+import {
+	CheckEmailDto,
+	ConfirmEmailDto,
+	LoginRequest,
+	RegisterRequest
+} from './dto'
 
 @Controller('auth')
 export class AuthController {
@@ -35,6 +41,7 @@ export class AuthController {
 		return await this.authService.login(res, dto)
 	}
 
+	@Protected()
 	@Post('logout')
 	async logout(@Res({ passthrough: true }) res: Response) {
 		return await this.authService.logout(res)
@@ -46,6 +53,11 @@ export class AuthController {
 		@Res({ passthrough: true }) res: Response
 	) {
 		return await this.authService.refresh(req, res)
+	}
+
+	@Post('check-email')
+	async checkEmail(@Body() dto: CheckEmailDto) {
+		return this.authService.checkEmail(dto.email)
 	}
 
 	@Post('confirm')
