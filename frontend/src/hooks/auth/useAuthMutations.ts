@@ -83,7 +83,6 @@ export function useAuthMutations({
 		)
 	}
 
-	// Вызывается при первом запросе на отправку кода (после ввода пароля)
 	const onRegisterSubmit = (data: { email: string; password?: string }) => {
 		const password = data.password || registerForm.getValues('password')
 		const username = data.email.split('@')[0]
@@ -97,7 +96,6 @@ export function useAuthMutations({
 		)
 	}
 
-	// Вызывается при нажатии кнопки "Отправить еще раз"
 	const onResendSubmit = (data: { email: string }) => {
 		const password = registerForm.getValues('password')
 		const username = data.email.split('@')[0]
@@ -125,7 +123,7 @@ export function useAuthMutations({
 		onLoginSubmit,
 		onCheckEmailSubmit,
 		onRegisterSubmit,
-		onResendSubmit, // Экспортируем новую функцию
+		onResendSubmit,
 		onConfirmSubmit
 	}
 }
