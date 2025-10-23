@@ -110,11 +110,11 @@ export class AuthService {
 				}
 			})
 
-			/* await this.emailService.sendUserConfirmation(
+			await this.emailService.sendUserConfirmation(
 				isExists.email,
 				verificationCode
-			) */
-			console.log(verificationCode)
+			)
+
 			return {
 				message:
 					'Мы отправили Вам новый код подтверждения. Пожалуйста, проверьте почту',
@@ -336,10 +336,12 @@ export class AuthService {
 				name: string
 				picture?: string
 			}
-		}
+		},
+		ip: string
 	) {
 		const { email } = req.user
 
+		await this.handleIpRequestLimit(ip)
 		await this.handleEmailRequestLimit(email)
 
 		const user = await this.findOrCreateUserByOAuth(req)
@@ -350,27 +352,23 @@ export class AuthService {
 	private async handleIpRequestLimit(ip: string): Promise<void> {
 		const maxAttempts = this.MAX_REQUESTS_IP
 		const cooldownSeconds = ms(this.COOLDOWN_REQUESTS_IP) / 1000
-
 		const key = `rate-limit:ip:${ip}`
 
-		const currentCount = await this.redis.get(key)
+		const currentCount = await this.redis.incr(key)
 
-		if (currentCount && Number(currentCount) >= maxAttempts) {
+		if (currentCount === 1) {
+			await this.redis.expire(key, cooldownSeconds)
+		}
+
+		if (currentCount > maxAttempts) {
 			const ttl = await this.redis.ttl(key)
+			const cooldown = ttl > 0 ? ttl : cooldownSeconds
+
 			throw new BadRequestException({
-				message: 'Превышен лимит запросов для вашего IP',
-				cooldown: ttl > 0 ? ttl : 0
+				message: 'Превышен лимит запросов с вашего IP',
+				cooldown: cooldown
 			})
 		}
-
-		const pipeline = this.redis.pipeline()
-		pipeline.incr(key)
-
-		if (!currentCount) {
-			pipeline.expire(key, cooldownSeconds)
-		}
-
-		await pipeline.exec()
 	}
 
 	private async handleEmailRequestLimit(email: string): Promise<void> {
@@ -422,7 +420,7 @@ export class AuthService {
 		}
 	}
 
-	async checkEmail(email: string) {
+	async checkEmail(email: string, ip: string) {
 		const user = await this.prismaService.user.findUnique({
 			where: { email }
 		})
@@ -430,6 +428,9 @@ export class AuthService {
 		if (user && user.isVerified) {
 			throw new ConflictException('Пользователь уже зарегистрирован')
 		}
+
+		await this.handleIpRequestLimit(ip)
+		await this.handleEmailRequestLimit(email)
 
 		return { message: 'Email доступен для регистрации' }
 	}

@@ -60,8 +60,8 @@ export class AuthController {
 	}
 
 	@Post('check-email')
-	async checkEmail(@Body() dto: CheckEmailDto) {
-		return this.authService.checkEmail(dto.email)
+	async checkEmail(@Body() dto: CheckEmailDto, @IpAddress() ip: string) {
+		return this.authService.checkEmail(dto.email, ip)
 	}
 
 	@Post('confirm')
@@ -80,8 +80,12 @@ export class AuthController {
 	@Get('google/callback')
 	@UseGuards(AuthGuard('google'))
 	@UseFilters(new OAuthExceptionFilter(new ConfigService()))
-	async googleAuthRedirect(@Req() req, @Res() res: Response) {
-		await this.authService.validateOAuthLogin(res, req)
+	async googleAuthRedirect(
+		@Req() req,
+		@Res() res: Response,
+		@IpAddress() ip: string
+	) {
+		await this.authService.validateOAuthLogin(res, req, ip)
 
 		const frontendUrl = this.configService.getOrThrow<string>('CLIENT_URL')
 		res.redirect(frontendUrl)

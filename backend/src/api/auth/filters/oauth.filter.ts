@@ -22,7 +22,7 @@ export class OAuthExceptionFilter implements ExceptionFilter {
 
 		if (
 			typeof exceptionResponse === 'object' &&
-			exceptionResponse.cooldown
+			exceptionResponse.cooldown !== undefined
 		) {
 			const frontendUrl = this.CLIENT_URL
 
