@@ -1,13 +1,14 @@
 import { Logger, ValidationPipe } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { NestFactory } from '@nestjs/core'
+import type { NestExpressApplication } from '@nestjs/platform-express'
 import cookieParser from 'cookie-parser'
 
 import { AppModule } from './app.module'
 import { getCorsConfig } from './configs'
 
 async function bootstrap() {
-	const app = await NestFactory.create(AppModule)
+	const app = await NestFactory.create<NestExpressApplication>(AppModule)
 
 	const config = app.get(ConfigService)
 	const logger = new Logger(AppModule.name)
@@ -18,6 +19,7 @@ async function bootstrap() {
 	app.enableCors(getCorsConfig(config))
 	app.useGlobalPipes(new ValidationPipe())
 	app.use(cookieParser(config.getOrThrow<string>('COOKIES_SECRET')))
+	app.set('trust proxy', true)
 
 	try {
 		await app.listen(port)

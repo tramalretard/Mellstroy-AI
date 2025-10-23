@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable } from '@nestjs/common'
 import {
 	ConflictException,
 	NotFoundException,
@@ -10,6 +10,7 @@ import { User } from '@prisma/client'
 import { hash, verify } from 'argon2'
 import { randomBytes } from 'crypto'
 import type { Request, Response } from 'express'
+import Redis from 'ioredis'
 import { isDev, ms, StringValue } from 'src/common/utils'
 import { PrismaService } from 'src/infra/prisma/prisma.service'
 
@@ -24,20 +25,25 @@ import { JwtPayload } from './interfaces'
 export class AuthService {
 	private readonly JWT_ACCESS_TOKEN_TTL: StringValue
 	private readonly JWT_REFRESH_TOKEN_TTL: StringValue
-	private readonly EXPIRE_MINUTES_VERIFICATION_CODE: StringValue
-	private readonly MAX_REQUESTS_EMAIL: number
-	private readonly COOLDOWN_REQUESTS_EMAIL: StringValue
-	private readonly MAX_REQUESTS_IP: number
-	private readonly COOLDOWN_REQUESTS_IP: StringValue
 
 	private readonly COOKIES_DOMAIN: string
+
+	private readonly EXPIRE_MINUTES_VERIFICATION_CODE: StringValue
+
+	private readonly MAX_REQUESTS_EMAIL: number
+	private readonly COOLDOWN_REQUESTS_EMAIL: StringValue
+
+	private readonly MAX_REQUESTS_IP: number
+	private readonly COOLDOWN_REQUESTS_IP: StringValue
 
 	constructor(
 		private readonly prismaService: PrismaService,
 		private readonly configService: ConfigService,
 		private readonly jwtService: JwtService,
 		private readonly userService: UserService,
-		private emailService: EmailService
+		private emailService: EmailService,
+
+		@Inject('REDIS_CLIENT') private readonly redis: Redis
 	) {
 		this.JWT_ACCESS_TOKEN_TTL = configService.getOrThrow<StringValue>(
 			'JWT_ACCESS_TOKEN_TTL'
@@ -58,9 +64,15 @@ export class AuthService {
 		this.COOLDOWN_REQUESTS_EMAIL = configService.getOrThrow<StringValue>(
 			'COOLDOWN_REQUESTS_EMAIL'
 		)
+
+		this.MAX_REQUESTS_IP =
+			configService.getOrThrow<number>('MAX_REQUESTS_IP')
+		this.COOLDOWN_REQUESTS_IP = configService.getOrThrow<StringValue>(
+			'COOLDOWN_REQUESTS_IP'
+		)
 	}
 
-	async register(dto: RegisterRequest) {
+	async register(dto: RegisterRequest, ip: string) {
 		const { username, password, email } = dto
 
 		const isExists = await this.prismaService.user.findUnique({
@@ -74,6 +86,7 @@ export class AuthService {
 				throw new ConflictException('Пользователь уже зарегистрирован')
 			}
 
+			await this.handleIpRequestLimit(ip)
 			await this.handleEmailRequestLimit(email)
 
 			const verificationCode = (
@@ -141,7 +154,7 @@ export class AuthService {
 		}
 	}
 
-	async login(res: Response, dto: LoginRequest) {
+	async login(res: Response, dto: LoginRequest, ip: string) {
 		const { email, password } = dto
 
 		const user = await this.prismaService.user.findUnique({
@@ -150,6 +163,7 @@ export class AuthService {
 			}
 		})
 
+		await this.handleIpRequestLimit(ip)
 		await this.handleEmailRequestLimit(email)
 
 		if (!user) throw new NotFoundException('Неверный email или пароль')
@@ -333,6 +347,32 @@ export class AuthService {
 		return this.auth(res, user)
 	}
 
+	private async handleIpRequestLimit(ip: string): Promise<void> {
+		const maxAttempts = this.MAX_REQUESTS_IP
+		const cooldownSeconds = ms(this.COOLDOWN_REQUESTS_IP) / 1000
+
+		const key = `rate-limit:ip:${ip}`
+
+		const currentCount = await this.redis.get(key)
+
+		if (currentCount && Number(currentCount) >= maxAttempts) {
+			const ttl = await this.redis.ttl(key)
+			throw new BadRequestException({
+				message: 'Превышен лимит запросов для вашего IP',
+				cooldown: ttl > 0 ? ttl : 0
+			})
+		}
+
+		const pipeline = this.redis.pipeline()
+		pipeline.incr(key)
+
+		if (!currentCount) {
+			pipeline.expire(key, cooldownSeconds)
+		}
+
+		await pipeline.exec()
+	}
+
 	private async handleEmailRequestLimit(email: string): Promise<void> {
 		const maxAttempts = this.MAX_REQUESTS_EMAIL
 		const coolDownRequest = ms(this.COOLDOWN_REQUESTS_EMAIL)
@@ -394,7 +434,7 @@ export class AuthService {
 		return { message: 'Email доступен для регистрации' }
 	}
 
-	async confirmEmail(res: Response, dto: ConfirmEmailDto) {
+	async confirmEmail(res: Response, dto: ConfirmEmailDto, ip: string) {
 		const isExist = await this.prismaService.user.findUnique({
 			where: { email: dto.email }
 		})
@@ -416,6 +456,7 @@ export class AuthService {
 			)
 		}
 
+		await this.handleIpRequestLimit(ip)
 		await this.handleEmailRequestLimit(isExist.email)
 
 		const isValidVerificationCode = await verify(

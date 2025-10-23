@@ -13,8 +13,19 @@ services:
         networks:
             - mellstroy-ai
 
+    redis:
+        container_name: mellstroy-ai-redis
+        image: redis:latest
+        restart: always
+        ports:
+            - '6379:6379'
+        volumes:
+            - redis_data:/data
+        networks:
+            - mellstroy-ai
 volumes:
     postgres_data:
+    redis_data:
 
 networks:
     mellstroy-ai:

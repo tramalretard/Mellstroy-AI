@@ -13,6 +13,7 @@ import { AuthGuard } from '@nestjs/passport'
 import { User } from '@prisma/client'
 import type { Request, Response } from 'express'
 import { Protected } from 'src/common/decorators'
+import { IpAddress } from 'src/common/decorators/ipaddress.decorator'
 
 import { AuthService } from './auth.service'
 import {
@@ -31,16 +32,17 @@ export class AuthController {
 	) {}
 
 	@Post('register')
-	async register(@Body() dto: RegisterRequest) {
-		return await this.authService.register(dto)
+	async register(@Body() dto: RegisterRequest, @IpAddress() ip: string) {
+		return await this.authService.register(dto, ip)
 	}
 
 	@Post('login')
 	async login(
 		@Res({ passthrough: true }) res: Response,
-		@Body() dto: LoginRequest
+		@Body() dto: LoginRequest,
+		@IpAddress() ip: string
 	) {
-		return await this.authService.login(res, dto)
+		return await this.authService.login(res, dto, ip)
 	}
 
 	@Protected()
@@ -65,9 +67,10 @@ export class AuthController {
 	@Post('confirm')
 	async confirmEmail(
 		@Body() dto: ConfirmEmailDto,
-		@Res({ passthrough: true }) res: Response
+		@Res({ passthrough: true }) res: Response,
+		@IpAddress() ip: string
 	) {
-		return await this.authService.confirmEmail(res, dto)
+		return await this.authService.confirmEmail(res, dto, ip)
 	}
 
 	@Get('google')
