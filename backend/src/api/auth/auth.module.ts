@@ -6,11 +6,12 @@ import { JwtStrategy } from 'src/common/strategies'
 import { GoogleStrategy } from 'src/common/strategies/google.strategy'
 import { getJwtConfig } from 'src/configs'
 
+import { EmailModule } from '../email/email.module'
 import { UserService } from '../user/user.service'
 
 import { AuthController } from './auth.controller'
 import { AuthService } from './auth.service'
-import { EmailModule } from '../email/email.module'
+import { OAuthExceptionFilter } from './filters/oauth.filter'
 
 @Module({
 	imports: [
@@ -23,6 +24,12 @@ import { EmailModule } from '../email/email.module'
 		EmailModule
 	],
 	controllers: [AuthController],
-	providers: [AuthService, JwtStrategy, UserService, GoogleStrategy]
+	providers: [
+		AuthService,
+		JwtStrategy,
+		UserService,
+		GoogleStrategy,
+		OAuthExceptionFilter
+	]
 })
 export class AuthModule {}

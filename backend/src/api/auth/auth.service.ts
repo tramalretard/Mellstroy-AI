@@ -25,6 +25,10 @@ export class AuthService {
 	private readonly JWT_ACCESS_TOKEN_TTL: StringValue
 	private readonly JWT_REFRESH_TOKEN_TTL: StringValue
 	private readonly EXPIRE_MINUTES_VERIFICATION_CODE: StringValue
+	private readonly MAX_REQUESTS_EMAIL: number
+	private readonly COOLDOWN_REQUESTS_EMAIL: StringValue
+	private readonly MAX_REQUESTS_IP: number
+	private readonly COOLDOWN_REQUESTS_IP: StringValue
 
 	private readonly COOKIES_DOMAIN: string
 
@@ -48,6 +52,12 @@ export class AuthService {
 			)
 
 		this.COOKIES_DOMAIN = configService.getOrThrow<string>('COOKIES_DOMAIN')
+
+		this.MAX_REQUESTS_EMAIL =
+			configService.getOrThrow<number>('MAX_REQUESTS_EMAIL')
+		this.COOLDOWN_REQUESTS_EMAIL = configService.getOrThrow<StringValue>(
+			'COOLDOWN_REQUESTS_EMAIL'
+		)
 	}
 
 	async register(dto: RegisterRequest) {
@@ -61,10 +71,10 @@ export class AuthService {
 
 		if (isExists) {
 			if (isExists.isVerified) {
-				throw new ConflictException(
-					'Пользователь с таким email уже зарегистрирован'
-				)
+				throw new ConflictException('Пользователь уже зарегистрирован')
 			}
+
+			await this.handleEmailRequestLimit(email)
 
 			const verificationCode = (
 				await this.generateVerificationCode()
@@ -87,7 +97,7 @@ export class AuthService {
 				}
 			})
 
-			/* 	await this.emailService.sendUserConfirmation(
+			/* await this.emailService.sendUserConfirmation(
 				isExists.email,
 				verificationCode
 			) */
@@ -140,6 +150,8 @@ export class AuthService {
 			}
 		})
 
+		await this.handleEmailRequestLimit(email)
+
 		if (!user) throw new NotFoundException('Неверный email или пароль')
 
 		const isValidPassword = await verify(user.password!, password)
@@ -149,7 +161,7 @@ export class AuthService {
 
 		if (!user.isVerified) {
 			throw new UnauthorizedException(
-				'Пожалуйста, подтвердите ваш email перед входом'
+				'Попробуйте зарегистрироваться заново'
 			)
 		}
 
@@ -312,9 +324,62 @@ export class AuthService {
 			}
 		}
 	) {
+		const { email } = req.user
+
+		await this.handleEmailRequestLimit(email)
+
 		const user = await this.findOrCreateUserByOAuth(req)
 
 		return this.auth(res, user)
+	}
+
+	private async handleEmailRequestLimit(email: string): Promise<void> {
+		const maxAttempts = this.MAX_REQUESTS_EMAIL
+		const coolDownRequest = ms(this.COOLDOWN_REQUESTS_EMAIL)
+
+		const user = await this.prismaService.user.findUnique({
+			where: { email }
+		})
+
+		if (!user) {
+			return
+		}
+
+		const now = new Date()
+		const lastRequestAt = user.lastRequestAt
+		const attempts = user.currentRequestEmail ?? 0
+
+		if (
+			lastRequestAt &&
+			now.getTime() < lastRequestAt.getTime() + coolDownRequest
+		) {
+			if (attempts >= maxAttempts) {
+				const timeLeft =
+					lastRequestAt.getTime() + coolDownRequest - now.getTime()
+				const secondsLeft = Math.ceil(timeLeft / 1000)
+
+				throw new BadRequestException({
+					message: 'Превышен лимит запросов',
+					cooldown: secondsLeft
+				})
+			}
+
+			await this.prismaService.user.update({
+				where: { email },
+				data: {
+					currentRequestEmail: attempts + 1,
+					lastRequestAt: now
+				}
+			})
+		} else {
+			await this.prismaService.user.update({
+				where: { email },
+				data: {
+					currentRequestEmail: 1,
+					lastRequestAt: now
+				}
+			})
+		}
 	}
 
 	async checkEmail(email: string) {
@@ -323,9 +388,7 @@ export class AuthService {
 		})
 
 		if (user && user.isVerified) {
-			throw new ConflictException(
-				'Пользователь с таким email уже зарегистрирован'
-			)
+			throw new ConflictException('Пользователь уже зарегистрирован')
 		}
 
 		return { message: 'Email доступен для регистрации' }
@@ -352,6 +415,8 @@ export class AuthService {
 				'Срок действия кода истек. Пожалуйста, запросите новый код'
 			)
 		}
+
+		await this.handleEmailRequestLimit(isExist.email)
 
 		const isValidVerificationCode = await verify(
 			isExist.verificationCode,

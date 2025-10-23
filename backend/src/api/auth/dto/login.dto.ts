@@ -1,4 +1,11 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator'
+import { Ip } from '@nestjs/common'
+import {
+	IsEmail,
+	IsNotEmpty,
+	IsOptional,
+	IsString,
+	MinLength
+} from 'class-validator'
 
 export class LoginRequest {
 	@IsNotEmpty({ message: 'Пароль не может быть пустым' })

@@ -5,6 +5,7 @@ import {
 	Post,
 	Req,
 	Res,
+	UseFilters,
 	UseGuards
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -20,6 +21,7 @@ import {
 	LoginRequest,
 	RegisterRequest
 } from './dto'
+import { OAuthExceptionFilter } from './filters/oauth.filter'
 
 @Controller('auth')
 export class AuthController {
@@ -74,11 +76,11 @@ export class AuthController {
 
 	@Get('google/callback')
 	@UseGuards(AuthGuard('google'))
-	async googleAuthCallback(@Req() req, @Res() res: Response) {
+	@UseFilters(new OAuthExceptionFilter(new ConfigService()))
+	async googleAuthRedirect(@Req() req, @Res() res: Response) {
 		await this.authService.validateOAuthLogin(res, req)
 
-		const clientUrl = this.configService.getOrThrow<string>('CLIENT_URL')
-
-		res.redirect(clientUrl)
+		const frontendUrl = this.configService.getOrThrow<string>('CLIENT_URL')
+		res.redirect(frontendUrl)
 	}
 }
