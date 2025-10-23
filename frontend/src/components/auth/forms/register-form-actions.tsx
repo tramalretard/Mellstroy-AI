@@ -36,12 +36,6 @@ export function RegisterFormActions({
 			>
 				{state.isPending ? (
 					<AnimatedLoader />
-				) : state.isRateLimitBlocked ? (
-					`${Math.floor(state.rateLimitCountdownSeconds / 60)}:${(
-						state.rateLimitCountdownSeconds % 60
-					)
-						.toString()
-						.padStart(2, '0')}`
 				) : state.step === 2 ? (
 					'Подтвердить'
 				) : (
@@ -49,7 +43,7 @@ export function RegisterFormActions({
 				)}
 			</Button>
 			<AnimatePresence>
-				{state.step === 2 && (
+				{state.step === 2 && !state.isRateLimitBlocked && (
 					<motion.div
 						initial={{ opacity: 0, height: 0 }}
 						animate={{
@@ -77,13 +71,11 @@ export function RegisterFormActions({
 							onClick={actions.handleResendCode}
 							disabled={
 								state.isRegisterPending ||
-								state.isResendDisabled ||
-								state.isRateLimitBlocked 
+								state.isResendDisabled
 							}
 							className={cn(
 								'text-foreground pt-1 font-semibold disabled:opacity-50',
 								!state.isResendDisabled &&
-									!state.isRateLimitBlocked &&
 									'cursor-pointer hover:underline'
 							)}
 						>
@@ -91,9 +83,7 @@ export function RegisterFormActions({
 								? 'Отправляем...'
 								: state.isResendDisabled
 									? `Отправить через ${state.resendCountdownSeconds} с.`
-									: state.isRateLimitBlocked
-										? `Подождите ${state.rateLimitCountdownSeconds} с.`
-										: 'Отправить еще раз'}
+									: 'Отправить еще раз'}
 						</button>
 					</motion.div>
 				)}

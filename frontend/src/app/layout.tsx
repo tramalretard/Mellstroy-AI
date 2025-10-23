@@ -1,8 +1,6 @@
 import type { Metadata } from 'next'
 import { Montserrat } from 'next/font/google'
 
-import { ThemeButton } from '@/components/buttons/theme-button'
-
 import './globals.css'
 import { QueryProvider, ThemeProvider } from '@/providers'
 
@@ -30,7 +28,6 @@ export default function RootLayout({
 					disableTransitionOnChange
 				>
 					<QueryProvider>{children}</QueryProvider>
-					<ThemeButton className='absolute top-10 right-10 z-30' />
 				</ThemeProvider>
 			</body>
 		</html>

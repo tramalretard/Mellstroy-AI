@@ -1,4 +1,4 @@
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
 import { UseFormReturn } from 'react-hook-form'
 
@@ -12,9 +12,13 @@ interface UrlErrorEffectProps {
 	}
 }
 
-export function useUrlErrorEffect({ forms, rateLimitCountdown }: UrlErrorEffectProps) {
+export function useUrlErrorEffect({
+	forms,
+	rateLimitCountdown
+}: UrlErrorEffectProps) {
 	const searchParams = useSearchParams()
 	const router = useRouter()
+	const pathname = usePathname()
 
 	useEffect(() => {
 		const errorType = searchParams.get('error')
@@ -23,14 +27,15 @@ export function useUrlErrorEffect({ forms, rateLimitCountdown }: UrlErrorEffectP
 
 		if (errorType === 'rate_limit' && message && cooldown) {
 			const cooldownSeconds = parseInt(cooldown, 10)
+
 			if (!isNaN(cooldownSeconds)) {
 				const errorMessage = decodeURIComponent(message)
 				forms.registerForm.setError('root', { message: errorMessage })
 				forms.loginForm.setError('root', { message: errorMessage })
 				rateLimitCountdown.start(cooldownSeconds)
 
-				router.replace(window.location.pathname, { scroll: false })
+				router.replace(pathname, { scroll: false })
 			}
 		}
-	}, [searchParams, forms, rateLimitCountdown, router])
+	}, [searchParams, pathname, router])
 }

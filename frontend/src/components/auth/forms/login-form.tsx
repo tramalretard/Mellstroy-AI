@@ -58,13 +58,7 @@ export function LoginForm({ form, state, actions }: LoginFormProps) {
 					variant='authwhite'
 					className='w-full text-xl'
 				>
-					{state.isPending ? (
-						<AnimatedLoader />
-					) : state.isRateLimitBlocked ? (
-						`${Math.floor(state.rateLimitCountdownSeconds / 60)}:${(state.rateLimitCountdownSeconds % 60).toString().padStart(2, '0')}`
-					) : (
-						'Войти'
-					)}
+					{state.isPending ? <AnimatedLoader /> : 'Войти'}
 				</Button>
 			</form>
 		</Form>

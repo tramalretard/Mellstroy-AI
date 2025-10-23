@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 
 import { loginSchema, registerSchema } from '@/data/auth'
@@ -8,7 +8,6 @@ import { useAuthMutations, useCountdown, useUrlErrorEffect } from './auth'
 import { COUNTDOWN_SECONDS } from '@/data'
 
 export function useAuthForms() {
-	// --- UI State ---
 	const [isRegistration, setIsRegistration] = useState(true)
 	const [step, setStep] = useState(0)
 	const [direction, setDirection] = useState(1)
@@ -16,7 +15,6 @@ export function useAuthForms() {
 	const [resendMessage, setResendMessage] = useState('')
 	const attemptedCode = useRef('')
 
-	// --- Forms ---
 	const registerForm = useForm({
 		resolver: zodResolver(registerSchema),
 		mode: 'onTouched',
@@ -31,15 +29,16 @@ export function useAuthForms() {
 		resolver: zodResolver(loginSchema),
 		defaultValues: { email: '', password: '' }
 	})
-	const forms = { registerForm, loginForm }
+	const forms = useMemo(
+		() => ({ registerForm, loginForm }),
+		[registerForm, loginForm]
+	)
 
-	// --- Specialized Hooks ---
 	const rateLimitCountdown = useCountdown({ initialSeconds: 0 })
 	const resendCountdown = useCountdown({ initialSeconds: COUNTDOWN_SECONDS })
 
 	useUrlErrorEffect({ forms, rateLimitCountdown })
 
-	// Колбэк ТОЛЬКО для повторной отправки
 	const onResendSuccess = () => {
 		resendCountdown.start()
 		setResendMessage('Новый код успешно отправлен!')
@@ -54,17 +53,14 @@ export function useAuthForms() {
 			setDirection(1)
 			setStep(1)
 		},
-		// Колбэк для ПЕРВОЙ отправки: просто переключаем шаг и запускаем кулдаун
 		onRegisterSuccess: () => {
 			setDirection(1)
 			setStep(2)
 			resendCountdown.start()
 		},
-		// Передаем новый колбэк
 		onResendSuccess: onResendSuccess
 	})
 
-	// --- Glue Logic & Action Handlers ---
 	const handleNextStep = async () => {
 		if (step === 0) {
 			const isEmailValid = await registerForm.trigger('email')
@@ -105,7 +101,6 @@ export function useAuthForms() {
 		}
 	}, [codeValue, step, mutations.isPending, handleConfirmSubmit])
 
-	// Вызывает новую мутацию onResendSubmit
 	const handleResendCode = () => {
 		if (resendCountdown.isActive || rateLimitCountdown.isActive) return
 		mutations.onResendSubmit({ email: emailForVerification })
@@ -129,7 +124,6 @@ export function useAuthForms() {
 		}
 	}
 
-	// --- Return structured object for the component ---
 	return {
 		state: {
 			isRegistration,
@@ -138,7 +132,6 @@ export function useAuthForms() {
 			emailForVerification,
 			resendMessage,
 			isRateLimitBlocked: rateLimitCountdown.isActive,
-			rateLimitCountdownSeconds: rateLimitCountdown.seconds,
 			isResendDisabled: resendCountdown.isActive,
 			resendCountdownSeconds: resendCountdown.seconds,
 			isPending: mutations.isPending,
