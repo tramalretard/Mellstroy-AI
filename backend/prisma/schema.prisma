@@ -22,9 +22,6 @@ model User {
   currentRequestEmail Int?      @default(0) @map("current_request_email")
   lastRequestAt       DateTime? @default(now()) @map("last_request_at")
 
-  ipAddress        String? @unique @map("ip_address")
-  currentRequestIp Int?   @default(0) @map("current_request_ip")
-
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
